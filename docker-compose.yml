@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: nexo-assist-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexo
+      POSTGRES_PASSWORD: nexo_dev
+      POSTGRES_DB: nexo_assist
+    ports:
+      - "5433:5432"
+    volumes:
+      - nexo_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  nexo_postgres_data:
