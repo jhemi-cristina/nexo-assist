@@ -1,176 +1,53 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import {
   MessageSquare, Ticket, LogOut, Send, User,
-  CheckCircle, Bot, ArrowLeft
+  CheckCircle, Bot, Menu, X
 } from "lucide-react";
 import { ConversationItem } from "../../../src/components/ConversationItem";
 import { TicketCard } from "../../../src/components/TicketCard";
 import { Avatar } from "../../../src/components/Avatar";
 import { ActionLabel } from "../../../src/components/ActionLabel";
+import { useConsole, TABS } from "../../../src/hooks/useConsole";
+import type { ConsoleMessage, ConsoleUser } from "../../../src/hooks/useConsole";
 import type { AgentAction, AgentDecision } from "../../../src/types";
 
-type Message = {
-  id: string;
-  role: "USER" | "ASSISTANT" | "ANALYST" | "SYSTEM";
-  content: string;
-  createdAt: string;
-  metadata?: { actions?: AgentAction[]; decision?: AgentDecision };
-};
-
-type TicketItem = {
-  id: string;
-  number: string;
-  type: string;
-  category: string;
-  priority: string;
-  status: string;
-  title: string;
-  description: string;
-  affectedUsers: number;
-  createdAt: string;
-  updatedAt: string;
-  deadlineAt?: string;
-  isOverdue?: boolean;
-};
-
-type Conversation = {
-  id: string;
-  status: string;
-  mode: string;
-  updatedAt: string;
-  messageCount: number;
-  analystId?: string;
-  user: { id: string; name: string; email: string };
-  messages?: Array<{ content: string; role: string }>;
-};
-
-type CurrentUser = { id: string; name: string; email: string; role: string };
-
-const TABS = [
-  { key: "all", label: "Todas" },
-  { key: "waiting", label: "Para você" },
-  { key: "active", label: "Com o agent" },
-  { key: "mine", label: "Minhas" },
-];
-
 export default function ConsolePage() {
-  const router = useRouter();
-  const [user, setUser] = useState<CurrentUser | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConv, setActiveConv] = useState<Conversation | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [tickets, setTickets] = useState<TicketItem[]>([]);
-  const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [tab, setTab] = useState("all");
-  const [activePanel, setActivePanel] = useState<"conversations" | "profile">("conversations");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d) => {
-        if (!d.user || d.user.role !== "ANALYST") { router.push("/login"); return; }
-        setUser(d.user);
-      })
-      .catch(() => router.push("/login"));
-  }, [router]);
-
-  const fetchConversations = useCallback(async () => {
-    const filter = tab === "waiting" ? "WAITING_ANALYST"
-      : tab === "active" ? "ACTIVE"
-      : tab === "mine" ? "mine"
-      : "all";
-    const res = await fetch(`/api/analyst/conversations?filter=${filter}`);
-    const data = await res.json();
-    setConversations(data.conversations ?? []);
-  }, [tab]);
-
-  useEffect(() => {
-    if (!user) return;
-    fetchConversations();
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(fetchConversations, 8000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [user, tab, fetchConversations]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const loadConversation = useCallback(async (conv: Conversation) => {
-    setActiveConv(conv);
-    const res = await fetch(`/api/analyst/conversations/${conv.id}`);
-    const data = await res.json();
-    setActiveConv(data.conversation);
-    setMessages(data.conversation.messages ?? []);
-    setTickets(data.tickets ?? []);
-  }, []);
-
-  const handleAssume = async () => {
-    if (!activeConv) return;
-    await fetch(`/api/analyst/conversations/${activeConv.id}/assume`, { method: "POST" });
-    await loadConversation(activeConv);
-    fetchConversations();
-  };
-
-  const handleReturn = async () => {
-    if (!activeConv) return;
-    await fetch(`/api/analyst/conversations/${activeConv.id}/return`, { method: "POST" });
-    await loadConversation(activeConv);
-    fetchConversations();
-  };
-
-  const handleClose = async () => {
-    if (!activeConv) return;
-    await fetch(`/api/analyst/conversations/${activeConv.id}/close`, { method: "POST" });
-    await loadConversation(activeConv);
-    fetchConversations();
-  };
-
-  const sendMessage = async () => {
-    if (!input.trim() || !activeConv || sending) return;
-    setSending(true);
-    try {
-      await fetch(`/api/analyst/conversations/${activeConv.id}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input }),
-      });
-      setInput("");
-      await loadConversation(activeConv);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-  };
-
-  function timeAgo(d: string) {
-    const diff = Date.now() - new Date(d).getTime();
-    const h = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    if (days > 0) return `${days}d`;
-    if (h > 0) return `${h}h`;
-    const m = Math.floor(diff / 60000);
-    return m > 0 ? `${m}m` : "agora";
-  }
-
-  const isMine = activeConv?.analystId === user?.id && activeConv?.status === "IN_PROGRESS";
-  const canAssume = activeConv?.status === "WAITING_ANALYST";
-  const canReturn = isMine;
-  const canClose = activeConv?.status !== "CLOSED";
+  const {
+    user,
+    conversations,
+    activeConv,
+    messages,
+    tickets,
+    input,
+    sending,
+    tab,
+    activePanel,
+    sidebarOpen,
+    isMine,
+    canAssume,
+    canReturn,
+    canClose,
+    messagesEndRef,
+    setInput,
+    setTab,
+    setActivePanel,
+    setSidebarOpen,
+    loadConversation,
+    handleAssume,
+    handleReturn,
+    handleClose,
+    sendMessage,
+    logout,
+    timeAgo,
+  } = useConsole();
 
   return (
     <div className="h-screen flex overflow-hidden" style={{ fontFamily: "var(--font-geist-sans, Arial, sans-serif)" }}>
-      {/* ICON BAR — 40px */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
       <nav className="w-10 flex flex-col items-center py-3 gap-4 shrink-0" style={{ backgroundColor: "#0f172a" }}>
         <div className="w-7 h-7 rounded-md flex items-center justify-center text-white font-bold text-xs mb-2"
           style={{ backgroundColor: "#2563eb" }}>
@@ -212,21 +89,23 @@ export default function ConsolePage() {
         <ProfilePanel user={user} />
       ) : (
         <>
-          {/* SIDEBAR — 260px */}
-          <div className="w-64 border-r border-slate-200 bg-white flex flex-col shrink-0">
-            {/* Header */}
-            <div className="px-4 py-3 border-b border-slate-200">
-              <h2 className="font-semibold text-slate-900 text-sm">Console do analista</h2>
-              {user && <p className="text-xs text-slate-500 mt-0.5">{user.name}</p>}
+          <div className={`border-r border-slate-200 bg-white flex flex-col shrink-0 ${sidebarOpen ? "fixed inset-y-0 left-10 z-50 w-80" : "hidden md:flex md:relative md:w-96"}`}>
+            <div className="px-4 py-3 border-b border-slate-200 flex items-start justify-between">
+              <div>
+                <h2 className="font-semibold text-slate-900 text-sm">Console do analista</h2>
+                {user && <p className="text-xs text-slate-500 mt-0.5">{user.name}</p>}
+              </div>
+              <button className="md:hidden text-slate-400 hover:text-slate-600 mt-0.5" onClick={() => setSidebarOpen(false)}>
+                <X size={18} />
+              </button>
             </div>
 
-            {/* Tabs */}
             <div className="flex border-b border-slate-200 px-2 pt-1 gap-1">
               {TABS.map((t) => (
                 <button
                   key={t.key}
                   onClick={() => setTab(t.key)}
-                  className={`px-2 py-1.5 text-xs font-medium rounded-t-md transition-colors ${
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-t-md transition-colors whitespace-nowrap ${
                     tab === t.key
                       ? "text-blue-700 border-b-2 border-blue-600"
                       : "text-slate-500 hover:text-slate-700"
@@ -237,7 +116,6 @@ export default function ConsolePage() {
               ))}
             </div>
 
-            {/* Conversation list */}
             <div className="flex-1 overflow-y-auto">
               {conversations.length === 0 ? (
                 <p className="text-xs text-slate-400 text-center p-4">Nenhuma conversa</p>
@@ -250,15 +128,22 @@ export default function ConsolePage() {
                     time={timeAgo(c.updatedAt)}
                     status={c.status}
                     selected={activeConv?.id === c.id}
-                    onClick={() => loadConversation(c)}
+                    onClick={() => { loadConversation(c); setSidebarOpen(false); }}
                   />
                 ))
               )}
             </div>
           </div>
 
-          {/* MAIN CHAT */}
           <main className="flex-1 flex flex-col bg-white min-w-0">
+            <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-slate-200">
+              <button className="text-slate-500 hover:text-slate-700" onClick={() => setSidebarOpen(true)}>
+                <Menu size={20} />
+              </button>
+              <span className="text-sm font-medium text-slate-700">
+                {activeConv ? activeConv.user?.name : "Conversas"}
+              </span>
+            </div>
             {!activeConv ? (
               <div className="flex-1 flex items-center justify-center">
                 <div className="text-center space-y-3">
@@ -270,7 +155,6 @@ export default function ConsolePage() {
               </div>
             ) : (
               <>
-                {/* Header */}
                 <header className="px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-white">
                   <div className="flex items-center gap-3">
                     <Avatar name={activeConv.user.name} size="sm" />
@@ -280,7 +164,6 @@ export default function ConsolePage() {
                     </div>
                   </div>
 
-                  {/* Action buttons */}
                   <div className="flex items-center gap-2">
                     {canAssume && (
                       <button
@@ -312,7 +195,6 @@ export default function ConsolePage() {
                   </div>
                 </header>
 
-                {/* Status badge */}
                 {activeConv.status === "WAITING_ANALYST" && (
                   <div className="bg-orange-50 border-b border-orange-200 px-6 py-2 text-xs text-orange-700 font-medium flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-orange-500" />
@@ -332,17 +214,15 @@ export default function ConsolePage() {
                   </div>
                 )}
 
-                {/* Messages */}
                 <div className="flex-1 overflow-y-auto px-4 py-6">
                   <div className="max-w-2xl mx-auto space-y-5">
                     {messages.map((msg) => (
-                      <AnalystMessage key={msg.id} msg={msg} />
+                      <AnalystMessage key={msg.id} msg={msg} employeeName={activeConv.user?.name} />
                     ))}
                     <div ref={messagesEndRef} />
                   </div>
                 </div>
 
-                {/* Input (only when IN_PROGRESS and it's mine) */}
                 {isMine && (
                   <div className="px-4 pb-4 pt-2 border-t border-slate-200 bg-white">
                     <div className="max-w-2xl mx-auto flex gap-2 items-end">
@@ -376,7 +256,6 @@ export default function ConsolePage() {
             )}
           </main>
 
-          {/* RIGHT PANEL — 260px */}
           {activeConv && (
             <aside className="w-64 border-l border-slate-200 bg-white flex flex-col shrink-0">
               <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-2">
@@ -396,7 +275,6 @@ export default function ConsolePage() {
                   ))
                 )}
               </div>
-              {/* Employee info */}
               <div className="p-3 border-t border-slate-200">
                 <div className="flex items-center gap-2.5">
                   <Avatar name={activeConv.user.name} size="sm" />
@@ -414,7 +292,7 @@ export default function ConsolePage() {
   );
 }
 
-function AnalystMessage({ msg }: { msg: Message }) {
+function AnalystMessage({ msg, employeeName }: { msg: ConsoleMessage; employeeName?: string }) {
   if (msg.role === "SYSTEM") {
     return (
       <div className="flex justify-center">
@@ -425,12 +303,18 @@ function AnalystMessage({ msg }: { msg: Message }) {
 
   if (msg.role === "USER") {
     return (
-      <div className="flex justify-end">
-        <div
-          className="max-w-[70%] text-white px-4 py-2.5 rounded-[18px] rounded-br-[4px] text-sm"
-          style={{ backgroundColor: "#1e293b" }}
-        >
-          {msg.content}
+      <div className="flex justify-start gap-2">
+        <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center shrink-0 mt-1">
+          <span className="text-slate-600 text-xs font-bold">F</span>
+        </div>
+        <div className="max-w-[70%] space-y-1">
+          <p className="text-xs text-slate-500">{employeeName ?? "Funcionário"}</p>
+          <div
+            className="text-white px-4 py-2.5 rounded-[18px] rounded-tl-[4px] text-sm"
+            style={{ backgroundColor: "#1e293b" }}
+          >
+            {msg.content}
+          </div>
         </div>
       </div>
     );
@@ -440,7 +324,7 @@ function AnalystMessage({ msg }: { msg: Message }) {
     return (
       <div className="flex justify-end">
         <div className="max-w-[70%] space-y-1">
-          <p className="text-xs text-slate-500 text-right">Analista</p>
+          <p className="text-xs text-slate-500 text-right">Você</p>
           <div className="bg-blue-600 text-white px-4 py-2.5 rounded-[18px] rounded-br-[4px] text-sm">
             {msg.content}
           </div>
@@ -449,7 +333,6 @@ function AnalystMessage({ msg }: { msg: Message }) {
     );
   }
 
-  // ASSISTANT
   const hasActions = msg.metadata?.actions && msg.metadata.actions.length > 0;
 
   return (
@@ -460,8 +343,8 @@ function AnalystMessage({ msg }: { msg: Message }) {
       <div className="max-w-[80%] space-y-2">
         {hasActions && (
           <ActionLabel
-            actions={msg.metadata!.actions!}
-            decision={msg.metadata?.decision ?? null}
+            actions={msg.metadata!.actions as AgentAction[]}
+            decision={(msg.metadata?.decision ?? null) as AgentDecision | null}
           />
         )}
         <div className="bg-white border border-slate-200 rounded-xl rounded-tl-sm px-4 py-3 text-sm text-slate-800 whitespace-pre-wrap shadow-sm">
@@ -472,7 +355,7 @@ function AnalystMessage({ msg }: { msg: Message }) {
   );
 }
 
-function ProfilePanel({ user }: { user: CurrentUser | null }) {
+function ProfilePanel({ user }: { user: ConsoleUser | null }) {
   return (
     <main className="flex-1 flex flex-col bg-white">
       <header className="px-6 py-3 border-b border-slate-200">
