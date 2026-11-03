@@ -3,7 +3,6 @@ import { getSession } from "../../../../../src/lib/auth";
 import { runAgent } from "../../../../../src/features/chat/agent";
 import type { StreamEvent } from "../../../../../src/types";
 
-export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function POST(
