@@ -33,9 +33,9 @@ export default function LoginPage() {
       }
 
       if (data.user.role === "ANALYST") {
-        router.push("/console");
+        window.location.href = "/console";
       } else {
-        router.push("/chat");
+        window.location.href = "/chat";
       }
     } catch {
       setError("Erro ao conectar. Tente novamente.");
